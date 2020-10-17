@@ -1,168 +1,203 @@
 <?php
-error_reporting(0);
+#接受所有请求源
+header('Access-Control-Allow-Origin:*');
 
-$DATA_URL = "https://live.kuaishou.com/m_graphql";
-$VIDEO_URL = "https://live.kuaishou.com/u/";
-$PROFILE_URL = "https://live.kuaishou.com/profile/";
-$WORK_URL = "https://kphbeijing.m.chenzhongtech.com/fw/photo/";#"https://m.gifshow.com/fw/photo/";
-$COOKIE = "did=web_2e1d7aff6c8c4051a69560f52ed3acdf; didv=1599281802000; userId=811386833; kuaishou.live.web_st=ChRrdWFpc2hvdS5saXZlLndlYi5zdBKgAU-Feb108FoJTyeUrEncf1CSNYSaV6s4AndruRYSqwNElJXlMR0LkLq72Dcp9DEbUlT-a5fUIH8AUB1DdZ7bZgCtDMCPHqVoZLMBdZI0HizKMhoIG7bDdvY8IprQ9JSLgw5R7taQSeOYGbvMUgEaK1fVPUe52PNqCt1NKtRR4ELEKnfXFqC1JTDAv1GbQwglmL_6uYb1FkdfaI262fSmz5AaEjGueioax06vmORaF3eBQr3cQSIg7flK8V4FItjvh4noW-xqkaa1lmZPyCKRsaGx-c-0aRooBTAB;";
-$COOKIE_MOBILE = "did=web_46ed8fb010564af086bf3109224266d1; didv=1602100840000; sid=5c373d9347cc606e2ae349b8; Hm_lvt_86a27b7db2c5c0ae37fee4a8a35033ee=1602100843; clientid=3; client_key=65890b29; Hm_lpvt_86a27b7db2c5c0ae37fee4a8a35033ee=1602100936";
+!empty($_REQUEST['url']) ? $originurl = $_REQUEST['url'] : retn(0,"请求参数错误");
+$type = $_GET['type'];
 
-function crawl_user($uid) {
-    $data = '{"operationName":"privateFeedsQuery","variables":{"principalId":"'.$uid.'","pcursor":"","count":24},"query":"query privateFeedsQuery($principalId: String, $pcursor: String, $count: Int) {\n  privateFeeds(principalId: $principalId, pcursor: $pcursor, count: $count) {\n    pcursor\n    list {\n      id\n      thumbnailUrl\n      poster\n      workType\n      type\n      useVideoPlayer\n      imgUrls\n      imgSizes\n      magicFace\n      musicName\n      caption\n      location\n      liked\n      onlyFollowerCanComment\n      relativeHeight\n      timestamp\n      width\n      height\n      counts {\n        displayView\n        displayLike\n        displayComment\n        __typename\n      }\n      user {\n        id\n        eid\n        name\n        avatar\n        __typename\n      }\n      expTag\n      __typename\n    }\n    __typename\n  }\n}\n"}';
-    $headers_web = array(
-        'Accept: */*',
-        'Accept-Encoding: gzip, deflate, br',
-        'Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-        'Connection: keep-alive',
-        'Content-Type: application/json',
-        'Host: live.kuaishou.com',
-        'Origin: https://live.kuaishou.com',
-        'Referer': 'https://live.kuaishou.com/profile/' .$uid,
-        'Pragma': 'no-cache',
-        'Cache-Control': 'no-cache',
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
-        'Cookie: '.$GLOBALS['COOKIE'],
-    );
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $GLOBALS['DATA_URL']);
+#生成随机did,用于请求快手链接的cookie
+$did = md5(time() . mt_rand(1,1000000));
+#每次请求生成一个随机ip
+$rip = Rand_IP();
+
+#方便用户使用，如用户传递一个包含链接的文本，将链接正则出来
+$originurl = preg_match("~[a-zA-z]+://[^\s]*~", $originurl, $originurlmatches);
+if (count($originurlmatches) == 0) {
+	#没有正则到要解析的地址
+	retn(-4,"没有检测到要解析的地址");
+}else{
+	$url = $originurlmatches[0];
+	#判断要解析的链接是短链接还是长链接
+	preg_match("~[a-zA-z]+://live.kuaishou.com/u/[a-zA-z0-9]+/[a-zA-z0-9]+~", $url, $videoidmatches);
+	if (count($videoidmatches) != 0) {
+		#长链接
+		#正则成功后截取最后的那个视频id
+		$videoid = substr(strrchr($videoidmatches[0], "/"), 1);
+		$url2 = 'https://c.kuaishou.com/fw/photo/'.$videoid.'?fid=281200681&cc=share_copylink&shareMethod=TOKEN&docId=0&kpn=KUAISHOU&subBiz=PHOTO&photoId='.$videoid.'&shareId=177551279794&shareToken=X-48680WzimADJVn_A&shareResourceType=PHOTO_OTHER&userId=3x3dzyvbvyugsem&shareType=1&et=1_i%2F0_unknown0&groupName=&appType=21&shareObjectId=26782848098&shareUrlOpened=0&timestamp=1589908450616';
+	}else{
+		#短链接
+		#获取302重定向请求头
+		$content1 = getResponseHeader($url);
+		#从请求头里正则解析出重定向地址
+		preg_match("~[a-zA-z]+://[^\s]*~", $content1, $matches);
+		if (count($matches) == 0) {
+			#没有正则到重定向地址
+			retn(-5,"这可能不是一个有效的快手链接");
+		}else{
+			$url2 = $matches[0];#获取到302重定向地址
+		}
+	}
+	#获取302重定向地址页面的响应体
+	$content2 = getResponseBody($url2);
+	#正则取出关键数据
+	preg_match("~window.pageData=(.*?)</script>~", $content2, $matches);
+	if (count($matches) <= 1) {
+		#没有正则到关键数据
+		retn(-6,"解析失败002");
+	}else{
+		$pagedata = $matches[1];
+		#关键:将html实体转回字符串(如&#34;转")
+		$pagedata= htmlspecialchars_decode($pagedata);
+		#解析json为数组(去除pom头3空白字符 防止解析json失败)
+		$pagedata_json = json_decode(trim($pagedata,chr(239).chr(187).chr(191)),true);
+		if($pagedata_json == null){
+			#关键数据解析为json失败
+			retn(-7,"解析失败003");
+		}else{
+			if($pagedata_json['status']==1){
+				$sharetype = $pagedata_json['share']['type'];
+
+				$data = [];
+				$data["type"] = $sharetype;
+				$data["title"] = $pagedata_json['share']['title'];;
+				$data["username"] = $pagedata_json['user']['name'];
+				$data["poster"] = $pagedata_json['video']['poster'];
+				if($sharetype=="video"){
+					#视频
+					$mp4url = $pagedata_json['video']['srcNoMark'];
+					$data["mp4url"] = $mp4url;
+					retn(1,"请求成功",$data);
+				}elseif($sharetype=="images"||$sharetype=="image_long"){
+					#图组或长图
+					$data["images"] = $pagedata_json['video']['images'];
+					$imageCdn = $pagedata_json['video']['imageCDN'];
+					for ($i=0; $i < count($data["images"]); $i++) {
+					    $data["images"][$i]['path'] = "http://".$imageCdn.$data["images"][$i]['path'];
+					}
+					$data["audio"] = "http://".$imageCdn.$pagedata_json['video']['audio'];
+					retn(1,"请求成功",$data);
+				}elseif($sharetype=="image"){
+					#图片
+					$data["image"] = $data["poster"];
+					$imageCdn = $pagedata_json['video']['imageCDN'];
+					$data["audio"] = "http://".$imageCdn.$pagedata_json['video']['audio'];
+					retn(1,"请求成功",$data);
+				}else{
+					#暂时写了图片、图组、长图、视频的解析。其他作品类型可自行测试添加
+					retn(-10,"该作品类型暂不支持，敬请期待");
+				}
+			}else{
+				#如果状态码不为1，看下是否有错误并输出错误信息
+				if($pagedata_json['error']==True){
+					#有时会返回错误：快手验证码 经测试，使用作品最新分享链接即可正常获取
+					if($pagedata_json['error_msg']=="快手验证码"){
+						retn(-11,"请用作品最新分享链接重试");
+					}else{
+						retn(-8,$pagedata_json['error_msg']);
+					}
+				}else{
+					retn(-9,"解析失败004");
+				}
+			}
+		}
+	}	
+}
+//随机IP
+function Rand_IP(){
+	#第一种方法，直接生成
+    $ip2id= round(rand(600000, 2550000) / 10000);
+    $ip3id= round(rand(600000, 2550000) / 10000);
+    $ip4id= round(rand(600000, 2550000) / 10000);
+	#第二种方法，随机抽取
+    $arr_1 = array("218","218","66","66","218","218","60","60","202","204","66","66","66","59","61","60","222","221","66","59","60","60","66","218","218","62","63","64","66","66","122","211");
+    $randarr= mt_rand(0,count($arr_1)-1);
+    $ip1id = $arr_1[$randarr];
+    return $ip1id.".".$ip2id.".".$ip3id.".".$ip4id;
+}
+#获取重定向请求头
+function getResponseHeader($url) {
+    $ch  = curl_init($url);
+    $httpheader = [];
+    $httpheader[] = 'X-FORWARDED-FOR:'.$rip;
+    $httpheader[] = 'CLIENT-IP:'.$rip;
+    #请求头中添加cookie
+    $httpheader[] = 'cookie:did=web_'.$did.'; didv='.time().'000;clientid=3; client_key=6589'.rand(1000, 9999);
+    curl_setopt($ch, CURLOPT_HTTPHEADER,$httpheader);
+    #以下两句设置返回响应头不返回响应体
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_NOBODY, true);
+    #返回数据不直接输出
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_ENCODING, 'gzip, deflate');
-    
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers_web);
-    
-    $result = curl_exec($ch);
-    if (curl_errno($ch)) {
-        echo 'Error:' . curl_error($ch);
-    }
+    $content = curl_exec($ch);
     curl_close($ch);
-    return $result;
+    return $content;
 }
-
-/*返回一个302地址*/
-function get_302($url){
-  $header = get_headers($url,1);
-  if (strpos($header[0],'301') || strpos($header[0],'302')) {
-     if(is_array($header['Location'])) {
-         return $header['Location'][count($header['Location'])-1];
-     }else{
-         return $header['Location'];
-     }
-  }else {
-     return $url;
-  }
-}
-
-//无水印解析
-function crawl_video($vid) {
+#获取响应体
+function getResponseBody($url) {
     $ch = curl_init();
-
-    curl_setopt($ch, CURLOPT_URL, $GLOBALS['WORK_URL'].$vid);
+    #5秒超时
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5000);
+    #设置默认ua  这里经常测试，尽量用手机的ua,电脑的ua获取不到数据
+    curl_setopt($ch, CURLOPT_USERAGENT,'User-Agent: Mozilla/5.0 (Linux; Android 5.1.1; vivo X9 Plus Build/LMY48Z) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/39.0.0.0 Mobile Safari/537.36');
+    #把随机ip添加进请求头 
+    $httpheader = [];
+    $httpheader[] = 'X-FORWARDED-FOR:'.$rip;
+    $httpheader[] = 'CLIENT-IP:'.$rip;
+    #请求头中添加cookie
+    $httpheader[] = 'cookie:did=web_'.$did.'; didv='.time().'000;';
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $httpheader);
+    #返回数据不直接输出
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-    
-    curl_setopt($ch, CURLOPT_ENCODING, 'gzip, deflate');
-    
-    $headers = array(
-        'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'Accept-Encoding: gzip, deflate, br',
-        'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8,zh-TW;q=0.7',
-        'Connection: keep-alive',
-        'Cookie:'.$GLOBALS['COOKIE_MOBILE'],
-        'Host: '.explode('/', $$GLOBALS['WORK_URL'])[2],
-        'Sec-Fetch-Dest: document',
-        'Sec-Fetch-Mode: navigate',
-        'Sec-Fetch-Site: none',
-        'Sec-Fetch-User: ?1',
-        'Upgrade-Insecure-Requests: 1',
-        'X-FORWARDED-FOR: 127.0.0.1',
-        'X-Real-IP: 127.0.0.1',
-        'HTTP_CLIENT_IP: 127.0.0.1',
-        'Referer: https://m.gifshow.com/wIXKEa',
-        'User-Agent: Mozilla/5.0 (Linux; U; Android 4.0; en-us; GT-I9300 Build/IMM76D) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
-    );
-    
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    
-    $result = curl_exec($ch);
-    if (curl_errno($ch)) {
-        echo 'Error:' . curl_error($ch);
+    #设置请求地址
+    curl_setopt($ch, CURLOPT_URL, $url);
+    #关闭ssl验证
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    #设置默认referer
+    curl_setopt($ch, CURLOPT_REFERER, 'http://m.gifshow.com');
+    #get方式请求
+    curl_setopt($ch, CURLOPT_POST, false);
+    $contents = curl_exec($ch);
+    curl_close($ch);
+    return $contents;
+}
+#数据返回
+function retn($code,$str,$data=null){
+    #解析其中的地址信息返回回来
+    $v_url = !empty($data['mp4url']) ? $data['mp4url'] : $data['image'];
+    if($GLOBALS['type']){
+      #指定返回数据为json utf-8
+      header('Content-type:application/json; charset=utf-8');
+      if($GLOBALS['type'] === "youmei_app"){
+        retndata($code,$str,$v_url);
+        return;
+      }
+      retndata($code,$str,$data);
+      return;
     }
-    curl_close($ch);
-    curl_close($ch);
-    
-    return $result;
-}
-
-//有水印解析
-function crawl_video2($uid, $vid) {
-    $data = '{"operationName":"SharePageQuery","variables":{"photoId":"'.$vid.'","principalId":"'.$uid.'"},"query":"query SharePageQuery($principalId: String, $photoId: String) {\n  feedById(principalId: $principalId, photoId: $photoId) {\n    currentWork {\n      playUrl\n      __typename\n    }\n    __typename\n  }\n}\n"}';
-
-    $headers_web = array(
-        'accept: */*',
-        'Accept-Encoding: gzip, deflate, br',
-        'Accept-Language: en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-        'Connection: keep-alive',
-        'Content-Type: application/json',
-        'Host: live.kuaishou.com',
-        'Origin: https://live.kuaishou.com',
-        'Sec-Fetch-Site: same-origin',
-        'Sec-Fetch-Mode: cors',
-        'Sec-Fetch-Dest: empty',
-        'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36',
-        'Cookie: '.$GLOBALS['COOKIE'],
-    );
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $GLOBALS['DATA_URL']);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_ENCODING, 'gzip, deflate');
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers_web);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    
-    $result = curl_exec($ch);
-    if (curl_errno($ch)) {
-        echo 'Error:' . curl_error($ch);
+    if($data==null){
+        echo "解析失败";
+    }else{
+      if($data['type']==="video"){
+        #指定返回数据为MP4视频
+        header("Content-Type: video/mp4");
+      }
+      header("Location: ".$v_url);
     }
-    curl_close($ch);
-    return $result;
 }
 
-function zz_video_url($content){
-    $str_r = '/"srcNoMark":"(.*?\.mp4.*?)"/';
-    preg_match_all($str_r, $content, $arr);
-    return $arr[1][0];
+function retndata($code,$str,$data=null){
+    if($data==null){
+        exit(json_encode([
+            "code"=>$code,
+            "msg"=>$str
+        ],JSON_UNESCAPED_UNICODE));
+    }else{
+        exit(json_encode([
+            "code"=>$code,
+            "msg"=>$str,
+            "data"=>$data
+        ],JSON_UNESCAPED_UNICODE));
+    }  
 }
-function zz_video_url2($content){
-    $json = json_decode($content, true);
-    return $json['data']['feedById']['currentWork']['playUrl'];
-}
-function startwith($str,$pattern) {
-    return strpos($str,$pattern) === 0 ? true:false;
-}
-
-$url = $_GET['url'];
-// $url='https://v.kuaishou.com/4NWYhq';
-$uid;
-$vid;
-if(strpos($url,'/u/') == false){
-    $url = get_302($url);
-}
-$url = explode('?', $url);
-$str_r = '/\/u\/(.*?)\/(.*)/';
-preg_match_all($str_r, $url[0], $arr);
-$uid = $arr[1][0];
-$vid = $arr[2][0];
-
-//解析视频直连
-//$content = crawl_video2($uid, $vid);
-$content = crawl_video($vid);
-// print($content);
-$v_url = zz_video_url($content);
-$v_url = explode('?', $v_url)[0];
-header("Location: ".$v_url);
-print ($v_url);
-exit;
 ?>
