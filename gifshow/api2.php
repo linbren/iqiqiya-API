@@ -5,7 +5,7 @@ $DATA_URL = "https://live.kuaishou.com/m_graphql";
 $VIDEO_URL = "https://live.kuaishou.com/u/";
 $PROFILE_URL = "https://live.kuaishou.com/profile/";
 $WORK_URL = "https://kphbeijing.m.chenzhongtech.com/fw/photo/";#"https://m.gifshow.com/fw/photo/";
-$COOKIE = "did=web_2e1d7aff6c8c4051a69560f52ed3acdf; didv=1599281802000; userId=811386833; kuaishou.live.web_st=ChRrdWFpc2hvdS5saXZlLndlYi5zdBKgAU-Feb108FoJTyeUrEncf1CSNYSaV6s4AndruRYSqwNElJXlMR0LkLq72Dcp9DEbUlT-a5fUIH8AUB1DdZ7bZgCtDMCPHqVoZLMBdZI0HizKMhoIG7bDdvY8IprQ9JSLgw5R7taQSeOYGbvMUgEaK1fVPUe52PNqCt1NKtRR4ELEKnfXFqC1JTDAv1GbQwglmL_6uYb1FkdfaI262fSmz5AaEjGueioax06vmORaF3eBQr3cQSIg7flK8V4FItjvh4noW-xqkaa1lmZPyCKRsaGx-c-0aRooBTAB;";
+$COOKIE = "did=web_2e1d7aff6c8c4051a69560f52ed3acdf; didv=1599281802000; userId=811386830; kuaishou.live.web_st=ChRrdWFpc2hvdS5saXZlLndlYi5zdBKgAU-Feb108FoJTyeUrEncf1CSNYSaV6s4AndruRYSqwNElJXlMR0LkLq72Dcp9DEbUlT-a5fUIH8AUB1DdZ7bZgCtDMCPHqVoZLMBdZI0HizKMhoIG7bDdvY8IprQ9JSLgw5R7taQSeOYGbvMUgEaK1fVPUe52PNqCt1NKtRR4ELEKnfXFqC1JTDAv1GbQwglmL_6uYb1FkdfaI262fSmz5AaEjGueioax06vmORaF3eBQr3cQSIg7flK8V4FItjvh4noW-xqkaa1lmZPyCKRsaGx-c-0aRooBTAB;";
 $COOKIE_MOBILE = "did=web_46ed8fb010564af086bf3109224266d1; didv=1602100840000; sid=5c373d9347cc606e2ae349b8; Hm_lvt_86a27b7db2c5c0ae37fee4a8a35033ee=1602100843; clientid=3; client_key=65890b29; Hm_lpvt_86a27b7db2c5c0ae37fee4a8a35033ee=1602100936";
 
 function crawl_user($uid) {
